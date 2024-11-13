@@ -4,76 +4,86 @@ layout: default
 
 # C++ coding practices
 
-Although this chapter is not FreeCAD specific, it is provided here in hope
-it will help to keep clean and easily maintainable code.
+Although this chapter is not FreeCAD specific, it is provided here to help both developers and code reviewers to ensure
+clean and easily maintainable code. The practices presented should be treated like food recipies - you can play with them, alter them - but every change should be thoughtful and intentional.
 
-## anonymous namespace 👎
+This document is __very__ much inspired by the [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines).
+Most rules presented here are from this document and whenever something is not covered or you are in doubt - 
+don't hesitate to consult it. 
 
-Anonymous namespaces are very convenient, but how are you going to unit test?
-Maybe the enclosed code is reusable if in a library or suchlike?
+> [!NOTE]  
+> Remember that code review is a collaborative discussion. Don’t hesitate to ask for clarification or help when needed. Reviewers can also make mistakes, the goal is to work together to refine the code to a point where everyone is satisfied.
 
-Use a named namespace to house free functions rather than a class or struct
-full of static (or what should be static) functions — idiomatic C++.
+While this guideline might not be consistently followed throughout all of the existing codebase, adhering to these practices moving forward will help improve the overall quality of the code and make future contributions more maintainable.
 
-## algorithms + data structures = programs 👍
+## Avoid anonymous namespaces
+
+Anonymous namespaces are very convenient, but makes code unreachable by tests
+and other code.
+Some code might only make sense in a given context, but if the functionallity
+is generic, it could be put in a library or suchlike.
+
+Use a (named) namespace to house free functions rather than a class or struct
+full of static (or what should be static) functions.
+In addition, private static functions doesn't even need to be decleared in the header file.
+
+## Algorithms and data structures
 
 > Algorithms + Data Structures = Programs
 --- Niklaus Wirth, 1976
 
-> STL algorithms say what they do, as opposed to hand-made for loops that
-> just show how they are implemented. By doing this, STL algorithms are a way
-> to rise the level of abstraction of the code, to match the one of your
-> calling site.
+> STL algorithms say what they do, as opposed to hand-made for loops that just show how they are implemented. By doing this, STL algorithms are a way to rise the level of abstraction of the code, to match the one of your calling site.
 --- Jonathan Boccara, 2016
 
-> No raw loops.
---- Sean Parent, 2013
+> Debugging code is twice as hard as writing the code in the first place. Therefore, if you write code as cleverly as possible, you are, by definition not smart enough to debug it.
+--- Brian W. Kernighan
 
 Data is information, facts etc. An algorithm is code that operates on data.
 
-Programming languages, or their libraries, include thoroughly tested algorithms
-to handle common data structures.
+Programming languages, or their libraries, include thoroughly tested algorithms to handle common data structures. 
 
-**By properly considering data structure, and keeping data separate from code,
-both code and data become simpler, more reliable, more flexible, and easier
-to maintain.**
+By properly considering algorithms and data structure, and keeping data separate from code, both code and data become simpler, more reliable, more flexible, and easier to maintain for the next person.
 
-Raw loops are those starting with for, while etc. Pre-C++11 they were messy
-and error-prone. C++11 added the range-based for loop which was a vast improvement:
+Raw loops are those starting with `for`, `while` etc. While there are many options on how to write a loop, readabillity and maintainabillity should be the priority.
 
 ```cpp
+// Pre-C++11:
+for(std::map<KeyType, ValueType>::iterator it = itemsMap.begin(); it != itemsMap.end(); ++it) {
+	//...
+    doSomething(*it);
+	//...
+}
+
+// C++11
 for(auto item : itemsMap) {
+	//...
 	doSomething(item);
+	//...
 }
-```
 
-C++17 added structured binding:
-```cpp
+// C++17
 for(auto [name, value] : itemsMap) {
+	//...
 	doSomething(name, value);
+	//...
 }
 ```
 
-Which is great, up to a point. STL `<algorithm>` library offers a wealth
-of proven, declarative solutions, e.g.:
+Another way, which can be even better, is to use STL `<algorithm>` library, which offers a wealth of proven, declarative solutions, e.g.:
 ```cpp
-std::for_each(stuff.begin(), stuff.end(), functionThatDoesTheWork);
+// C++17
+std::for_each(stuff.begin(), stuff.end(), do_something);
+auto result = std::find_if(stuff.begin(), stuff.end(), do_something);
+
+// C++20
+std::ranges::for_each(stuff, do_something);
+auto result = std::ranges::find_if(stuff, do_something);
 ```
-loops through stuff, sending each item in turn to the named function.
 
-Benefits include:
-- Can use just parts of a container
-- Can do reverse iteration (`rbegin, rend`)
-- Use a lambda, function or method name, or a lambda definition
-- Someone else has done the debugging
-- Can have execution policy for parallelism
-- Can be one-liner
-- Work with all types that have `for_each` defined, plus you can create your own
-- C++20 adds ranges, and heaps more algorithms
+Note, STL `<algorithm>` library can also use lambdas.
 
-Example: For a given input, find the appropriate prefix.
 
-One possible solution:
+**Example**: For a given input, find the appropriate prefix.
 ```cpp
 constexpr std::array<std::string_view, 5> prefixes {"", "k", "M", "G", "T"};
 size_t base = 0;
@@ -90,60 +100,51 @@ auto prefix = prefixes[base];
 
 Let’s make the data more expressive, more self-contained, and use STL
 algorithm `find_if`:
-{% raw %}
+
 ```cpp
-using Pair = std::pair<std::string_view, double>;
-constexpr std::array<Pair, 5> prefs {{
-	{ "", 0 },
-	{ "k", 1e3 },
-	{ "M", 1e6 },
-	{ "G", 1e9 },
-	{ "T", 1e12 },
-}};
+using PrefixSpec = struct {
+	char prefix;
+	unsigned long long factor;
+};
 
-auto comp = [&](auto pair) { return pair.second <= input; };
+static constexpr std::array<PrefixSpec, 7> sortedPrefixes {
+	{{'E', 1ULL << 60}, // 1 << 60 = 2^60
+	{'P', 1ULL << 50},
+	{'T', 1ULL << 40},
+	{'G', 1ULL << 30},
+	{'M', 1ULL << 20},  // 1 << 20 = 2^20 = 1024
+	{'k', 1ULL << 10},  // 1 << 10 = 2^10 = 1024
+	{'\0', 0}}};
+    
+const auto res = std::find_if(prefixes, [&](const auto& spec) {
+	return spec.factor <= size;
+});
 
-const auto spec = std::find_if(prefs.rbegin(), prefs.rend(), comp);
-
-auto prefix = spec->first;
+// Add one digit after the decimal place for all prefixed sizes
+return res->factor
+	? fmt::format("{:.1f} {}B", static_cast<double>(size) / res->factor, res->prefix)
+	: fmt::format("{} B", size);
 ```
-{% endraw %}
 
 Simpler, cleaner, more reliable. No raw loops, magic numbers or calculations.
 Note the reverse iterator.
 
-## comment 👎
-
-> The only truly good comment is the comment you found a way not to write.
---- Robert C. (Uncle Bob) Martin, 2016
+## Code comments
 
 > Don’t comment bad code—rewrite it.
 --- Brian W. Kernighan and P. J. Plaugher, 1974
 
-Comments are supposed to aid comprehension, but are often a nuisance. They have
-a tendency to become stale, out-of-date. Well named functions and variables
-obviate the need for comments. Worrying about the cost of function calls is more
-than likely premature optimization. Sometimes it is helpful if a class etc is
-prefaced by an explanatory comment.
+Comments are a piece of the program that the computer doesn't execute. While the intension is to aid comprehension, they have a tendency to get out-of-sync with the actual code it is commenting.
 
-**Above all, write code that explains itself.**
+It is prefered that code is self documenting when possible. This can be achived using good naming and structure.
 
-Remove:
-- Comments that attempt to workaround bad naming. Fix the naming
-- Comments that are frivolous, or repeat what code says
-- Large comments from inside class or function. Place ahead of the class or function
+In some cases, comments can be nessesary, to convay information that cannot be described in code. This can be links to bugs that a workaround describe or why edge cases are needed.
 
-## conditional 👎
+## Conditionals
 
-**Every branch in code doubles the number of paths. Increases complexity,
-maintenance burden**.
+Every branch in code doubles the number of paths and makes the code difficult to debug and maintain.
 
-Conditionals create indentation, and often violate the “Tell-Don’t-Ask”
-principle. Conditionals may indicate laziness, naive structure, not using
-polymorphism, design patterns etc.
-
-Simple `if else` may be better expressed as a ternary. `else` is rarely
-necessary. Code will be better without it. Ternary is ok though.
+Simple `if else` may be better expressed as a ternary `_ : _ ? _`. There are often ways to avoid `else`, when possible the resulting code will be better without. Ternary is ok though.
 
 Even modestly complex code in an `if` or `else` branch should be
 extracted to a function or lambda.
@@ -151,38 +152,24 @@ extracted to a function or lambda.
 A sequence of conditionals stepping through related variables may indicate
 code and data conflation.
 
-Can also apply to `switch` statements. See also: repetition, variable sets, raw loops.
+Can also apply to `switch` statements.
 
-Complicated `if else` code might benefit from converting to state machine.
+Complicated `if else` code might benefit from converting to a state machine.
 
-One school of thought says a function should have no more than one conditional,
-which should be the first statement!
 
-## const 👍
+## Const correctness
 
 > const all of the things.
 --- Jason Turner, 2021
 
 `const` is a statement of intent that something is to be immutable
-(not able to change). Immutability aids reliability. In Rust immutability
-is the default.
+(not able to change). Immutability aids reliability and is done using `constexpr`
 
-**In C++ immutability must be added manually using**
-
-## constexpr 👍
-
-Provides compile-time evaluation. Can increase compile time, but speedup runtime.
-More errors are caught at compile-time.
+This provides compile-time evaluation. Can increase compile time, but speedup runtime. More errors are caught at compile-time.
 
 `constexpr` is preferable for everything that can be so represented.
 
-In class scope, qualify `constexpr` with `static` . This does not apply
-in namespace scope. `const` qualification of `constexpr` is redundant.
-It is `const` already.
-
-DO NOT make `constexpr` variable names UPPERCASE. Leave that for macros.
-Unlike a macro, `constexpr` is not global. A `constexpr` definition can
-be hoisted to a higher scope to expand applicability.
+---
 
 ## dependencies 👎
 
