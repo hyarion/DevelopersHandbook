@@ -169,47 +169,62 @@ This provides compile-time evaluation. Can increase compile time, but speedup ru
 
 `constexpr` is preferable for everything that can be so represented.
 
----
-
-## dependencies 👎
+## Reducing dependencies
 
 > Any source code dependency, no matter where it is, can be inverted
 --- Robert C. (Uncle Bob) Martin
 
-A car needs wheels. But should a wheel know anything about a car? _Of course not!_
+Hard dependencies makes the codebase more entangled, makes changes more difficult, and makes unit testing really difficult.
 
 Examples of dependencies creeping in:
 ```cpp
-Application::getSomething(); // possibly dreaded singleton
+Application::getSomething(); // or any other singleton
 SomeDistantClass fing;
 void method(AnotherDistantClass values){}
 ```
 
-Code cannot function, be understood, be edited or tested, without
-its dependencies. So code free from dependencies is worth striving for.
-Code and its dependencies are said to be _coupled._
+This does not stand in contrast to code reuse, but it does require care when designing how code is accessing data.
 
-When different pieces of code _have the same_ dependency, they in turn
-are coupled to each other!
+A function which has hard dependencies cannot function, be understood, edited or tested, without the context of its dependencies. Avoiding these types of dependencies without code duplication is worth striving for.
 
-Everything affects everything else. **Spaghetti Code!**
+Code and its dependencies are said to be _coupled._ When different pieces of code _have the same_ dependency, they in turn are coupled to each other.
 
-Ideally, eliminate dependencies (stdlib etc don’t count).
+Required information can be injected via constructor or method parameters. 
 
-Required information can be injected via constructor or method parameters. “_Tell-Don’t-Ask_”.
+If it is necessary to introduce external code (e.g. a service object), do so by passing an interface, helper function or similar to avoid coupling.
 
-If it is necessary to introduce external code (e.g. a service object), do so via an interface.
+Even in complex cases where singeltons are used we can avoid hard coupling and make unit test a breeze.
+Example:
+```c++
+// For this example the implementation is included in the class definition
+// to simplify the example.
+class Example {
+public:
+    using DependencyHelper std::function<std::unique_ptr<Dependency>()>;
+    Example(
+        //...
+        DependencyHelper provide_helper_ = {}
+    ) : provide_helper_(std::move(provide_helper))
+    {
+        if (!provide_helper_) {
+            provide_helper_ = my_namespace::defaultDependencyHelper();
+        }
+    };
+private:
+    DependencyHelper provide_helper_;
+}
+```
+
+Ideally, all dependencies can be avoided, what dependencies to keep depends on the situation.
 
 If your code needs external data that was not available when calling this
-code, then likely there is a serious flaw in the overall design.
+code, then there's likely a better overall design that can be used.
 
-**Code that has no hard dependencies is single-purpose, reusable, changeable,
-and testable. Everything is simpler!**
+**Code that has no hard dependencies is single-purpose, reusable, changeable, and testable. Everything is simpler!**
 
-## design 👍
+## Code design
 
-> Any fool can write code that a computer can understand. Good programmers
-write code that humans can understand
+> Any fool can write code that a computer can understand. Good programmers write code that humans can understand
 --- Martin Fowler
 
 Something well-designed is _instantly_ understandable, and a pleasure to work
@@ -223,45 +238,53 @@ Well-designed code is completely free from hard-coded data.
 
 Understandable code can be more easily evaluated for correctness.
 
-For a novice programmer many of these concepts are probably incomprehensible,
-but with a little study and a determination to understand established
-principles, better code will ensue.
+For a novice programmer many of these concepts are probably quite foreign, but with a little study and help from the community and code reviews, better code will ensue.
 
-## enum 👍 👎
+---
+
+## Enums
 
 Used correctly, enums are invaluable.
 
-**BUT! Enums that codify _data values_ are a significant code smell!**
+Using enums:
+* ...specifically `enum class` allows strongly typed and scoped enumeration to be created.
+* ...instead of booleans for function arguments makes it easy to understand what the argument means without consulting the documentation or at least the method signature.
+* ...instead of integers when expressing anything other than numbers.
 
-See also algorithms + data structures = programs.
+Using enums to codify data values is strongly discouraged, as enums are best suited for representing fixed, intrinsic states rather than variable data. Instead, use `std::unordered_map<>` or other data structures that better represent dynamic or data-driven values, offering flexibility and improving maintainability.
 
-## getter, setter 👎
+## Minimize getters and setters
 
-Why encapsulate stuff in a class in true OO style, and then expose it?
-Maybe those variables belong in a struct (def public)?
+In object-oriented design, a class should encapsulate behavior, not just data. **Frequent use of getters and setters can limit a class’s ability to fully encapsulate its responsibilities** and may suggest that the data could be handled differently.
 
-**Getters and setters that act directly on class member variables are a significant code smell**.
+Consider:
 
-A class with lots of getters and setters is likely fundamentally flawed OO design.
+* Using a struct for simple data containers with public fields.
+* Focusing on methods that represent meaningful actions rather than exposing raw data.
 
-## inappropriate type 👎
+A well-designed class manages its own state and provides behavior, not just access.
 
-When everything is a string it is diffcult to understand what’s what.
-Apply suitable abstraction.
+## Appropriate typing
 
-## indentation 👎
+Using strings for everything can make code harder to understand and maintain. Use appropriate types to add clarity and structure.
+
+## Main code path and indentation
 
 > If you are past three indents you are basically screwed.
 > Time to rewrite.
 --- Linus Torvalds, 1995
 
-Indented code can be diﬃcult to reason about, and fragile:
+Indented code can be diﬃcult to reason about, and fragile.
+
+Main execution path should be the least indented one, i.e. conditions should cover specific cases. Early-Exit should be preferred to prune unwanted execution branches fast.
+
+Example:
 ```cpp
-if (sumfing) {
-	doSumfing();
-	if (sumfingElse) {
-		doSumfingElse()
-		if (sumfingElseAgain) {
+if (something) {
+	doSomething();
+	if (somethingElse) {
+		doSomethingElse()
+		if (somethingElseAgain) {
 			doThing();
 		} else {
 			doDifferent();
@@ -273,51 +296,37 @@ if (sumfing) {
 	doNothing();
 }
 ```
-Early returns help (the single return principle died long ago):
+
+Can be changed into:
 ```cpp
-if (!sumfing) {
+if (!something) {
 	doNothing();
 	return;
 }
-doSumfing();
-if (!sumfingElse) {
+doSomething();
+if (!somethingElse) {
 	doTheOther();
 	return;
 }
-doSumfingElse();
-if (!sumfingElseAgain) {
+doSomethingElse();
+if (!somethingElseAgain) {
 	doDifferent();
 	return;
 }
 doThing();
 ```
-Much better! Each block could be a function. Functions names mean
-comments not required:
-```cpp
-if (checkFing() && checkElse() && checkAgain()) {
-	doThing()
-}
-```
-Or all rolled into a single function:
-```cpp
-if (fingsValid()) {
-	doThing();
-}
-```
-Intent is clear, easy to read, simple.
 
-## initialization 👍
+## Initialization
 
-**Initialize all objects, and, if possible, make const (or better still, constexpr).**
+**Initialize all objects, and, if possible, make const or better still, constexpr.**
 
-Avoid default constructors. If there is not yet a value for an object,
-then don’t create it! Declare variables where they are used (not at
-the start of the block like last century C). Joining declaration and
-definition allows const:
+Avoid default constructors. If there is not yet a value for an object, then there's no need to create it. Declare variables close to where they are used (there's no need to start the declear variables at the start of the block like in ansi-c). Joining declaration and initialization allows const:
+
 ```cpp
-AnType thing; // mutable. Does it even have a default constructor?
-const AnType thing3 { calcVal() }; // immutable
+AType thing; // mutable. Does it have a default constructor?
+const AType thing3 { calcVal() }; // immutable
 ```
+
 Using uninitialized POD type variables is undefined behavior.
 
 It _is_ OK to declare variables inside a loop.
@@ -333,9 +342,9 @@ Initialize class member variables at declaration, not in constructors (since C++
 
 Static members can be defined in header file, no need to split to source file:
 ```cpp
-struct sumFing {
+struct Something {
 	static const int _value_ = 2; // since C++98 for int
-	static inline std::string _sumFing_ {"str"}; // since C++17
+	static inline std::string _something_ {"str"}; // since C++17
 }
 ```
 Lambdas can create and initialize variables in the capture, removing the
@@ -343,18 +352,16 @@ need to have the parameter in the surrounding scope. But don’t forget
 mutable if you want to update its value. The variable stays for the lifetime
 of the lambda (think static, but better).
 
-## lambda 👍
+## Lambdas
 
 > One of the most popular features of Modern C++.
 --- Jonathan Boccara, 2021
 
 A lambda (since C++11) is like a function that can be named, passed into and
 out of functions. They accept parameters, can be generic (since C++ 14), do a
-really good job of type deduction (auto), can be constexpr (since C++17).
+really good job of type deduction (auto), and can be constexpr (since C++17).
 
-Lambdas can capture data from enclosing scopes.
-
-Lambdas enforce encapsulation, simplifying surrounding scopes.
+Lambdas can capture data from enclosing scopes and enforce encapsulation, simplifying surrounding scopes.
 
 Lambdas are indispensable when breaking up complex code into individual
 responsibilities, perhaps as a precursor to moving to functions. Ditto
@@ -363,41 +370,91 @@ when removing repetition.
 Whilst lambdas are quite happy with simple auto parameters, best not
 to omit const or & as appropriate. Types may be required to help the IDE.
 
-## macro 👎
+Consider the following code: 
+```c++
+doSomething()
+if (somethingWentWrong()) {
+    // Clean up this
+    // ...
+    // Clean up that
+    return;
+}
+doSomethingElse();
+if (somethingElseWentWrong()) {
+    // Clean up this
+    // ...
+    // Clean up that
+    return;
+}
+doSomeOtherThing();
+// Clean up this
+// ...
+// Clean up that
+```
+Using lambdas we can remove code duplication to create the following:
+```c++
+auto cleanup = [](){
+    // Clean up this
+    // ...
+    // Clean up that
+};
 
-Macros are global, horrible to write, horrible to read, can hide all
-manner of sins, are diﬃcult to debug, and don’t play well with tooling.
-Consider replacing with a function. For conditional compilation in
+doSomething()
+if (somethingWentWrong()) {
+    cleanup();
+    return;
+}
+doSomethingElse();
+if (somethingElseWentWrong()) {
+    cleanup();
+    return;
+}
+doSomeOtherThing();
+cleanup();
+```
+
+
+## Avoid macros
+
+---
+
+While macros was needed back in the days. Today, with modern c++, that's usually not the case anymore.
+
+Macros are global, can be lead to unpredicted side effects and are difficult to debug. Consider replacing with a function. For conditional compilation in
 templates consider constexpr if.
 
-## magic literal 👎
+## Avoid magic literals
 
 “Magic” literals placed directly in code offer no clue as to what exactly
 is being specified or its origin, and no clue if the same data is used
 elsewhere. Comprehension and maintenance burden.
 
-Magic literals are data. **Replace with suitably named constants**. See also constexpr.
+To document what the magic literal is, use a suitable named constant.
+
+Instead of this:
 ```cpp
-displayLines(12); // bad
-constexpr auto stdScreenLength {25};
-constexpr auto bigScreenLength {43};
-displayLines(bigScreenLength); // good
+displayLines(25);
 ```
 
-## naming 👍
+Do the following instead:
+```c++
+constexpr auto sandardScreenLength {25};
+displayLines(sandardScreenLength);
+```
+
+## Good naming
 
 **Clear, concise, naming makes code understandable**.
 
-For an object whose purpose is to _do_ something (service object), prefer a verb.
-E.g. “renderer”.
+For an object whose purpose is to _do_ something (service object), prefer a verb. E.g. `renderer`.
 
-For an object that _is_ something (value object), prefer a noun. E.g. “drawing”.
+For an object that _is_ something (value object), prefer a noun. E.g. `drawing`.
 
-Something diﬃcult to name concisely likely does not have a single purpose, and needs refactoring.
+Something diﬃcult to name concisely likely does not have a single purpose and needs refactoring.
 
-Use names that are specific. E.g. “SaveLogToDisc”, not “ProcessLog”. “Process” could be anything.
+Use names that are specific. E.g. `SaveLogToDisc`, not `ProcessLog`. "Process" could be anything.
 
-A variable named after its data value defeats the whole point of “variable”:
+A variable named after its data value defeats the whole point of a variable:
 ```cpp
 struct Dog {
 	std::string color {};
