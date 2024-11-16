@@ -466,17 +466,15 @@ constexpr auto redDogColor {"red"}; // OK
 ```
 See also variable sets.
 
-## out parameter 👎
+## Out parameters
 
-Out parameters are _non-const, by-reference_, function parameters.
-Known to cause hard to find bugs.
+Out parameters are _non-const, by-reference, or by-pointer_, function parameters. These are known to cause hard to find bugs.
 
 Whether values are updated by the function is not obvious.
 
-**Where possible make function parameters `const` or `const&` and return
-a value, or return a container to return multiple values**.
+**Where possible make function parameters `const` or `const&` and return a value, or return a container to return multiple values**.
 
-RVO simplifies return and usually elides copies.
+Return value optimizations (RVO) simplifies return and usually elides copies.
 ```cpp
 auto func = [](const auto& str, const auto num) {
 	return { str, num };
@@ -487,58 +485,35 @@ Structured binding (since C++17) simplifies reading back the result at the calli
 auto [name, value] = func("qty", 2);
 ```
 
-## repetition 👎
+For methods that return multiple values, depending on context, it may be better to provide dedicated struct for result.
 
-> One of the things I've been trying to do is look for simpler or rules
-> underpinning good or bad design. I think one of the most valuable rules
-> is to avoid duplication
+## Code repetition
+
+> One of the things I've been trying to do is look for simpler or rules underpinning good or bad design. I think one of the most valuable rules is to avoid duplication
 --- Martin Fowler
 
 > Code duplication is by far one of the worst anti-patterns in software
 > engineering, eventually leading to buggy and unmaintainable systems.
 --- Magnus Stuhr, 2020
 
-> Don’t Repeat Yourself.
---- Andy Hunt and Dave Thomas, 1999
+Reducing code duplication and similar code also reduces the different paths a program might take during runtime. This in turn makes it easier to debug and test the code base.
 
-> Duplicate code is the root of all evil in software design
---- Robert C. (Uncle Bob) Martin
+Change requires finding every usage (difficult) and replicating the change (error-prone). Failure to catch just one instance creates a nasty bug that might remain undiscovered for a long time. Comprehension requires studying every item. Small differences are notoriously difficult to spot.
 
-Alright already! Repetition should be _ruthlessly_ eliminated! And not just
-identical code, but similar code too!
-
-**DRY** = “_Don’t Repeat Yourself_”
-
-**WET** = “_Waste Everyone’s Time_”, “_Write Everything Twice_”
-
-Change requires finding every usage (difficult) and replicating the change
-(error-prone). Failure to catch just one instance creates a nasty bug that
-might remain undiscovered for a long time. Comprehension requires studying
-every item. Small differences are notoriously difficult to spot.
-
-**Repetition is entirely avoidable!**
+**Repetition is entirely avoidable.**
 
 The variant part (the bit that is different between usages) of repeating
-code is often just one or two simple items in a long gobbledygook statement.
-The variant parts can be extracted and passed as parameters to a function
-or lambda executing the common body. A sequence of repeated code likely
-indicates the underlying data is actually a set and hence should be defined
-in a container and dealt with accordingly. clang-format off is often a sign
-of repetition or data represented by code.
+code is often just one or two items in a long chain of statement.
+The variant parts can be extracted and passed as parameters to a function or lambda executing the common body. A sequence of repeated code likely indicates the underlying data is actually a set and hence should be defined in a container and dealt with accordingly.
 
-See also: ternary operator, variable sets, naming.
-
-## static 👎
+## Static
 
 Often best avoided. For `const` variables consider `constexpr`, or
 initialisation in lambda capture.
 
-`static` functions _may_ be better moved out of class into namespace or some
-utility library/file.
+`static` functions _may_ be better moved out of class into a named namespace or some utility library/file.
 
-See also initialization.
-
-## ternary operator 👍
+## Ternary operator
 
 Reduce six lines:
 ```cpp
@@ -555,50 +530,46 @@ const option:
 ```cpp
 const int r = x == 2 ? 2 : 3;
 ```
-Also great for simplifying return statements. What’s not to like?
+Also great for simplifying return statements.
 
-## unit test 👍
+## Automated testing
 
-New code should be delivered with unit tests. Whilst e.g. GUI code is
-not so testable, it should contain only the GUI part, no “business logic”.
-Ideally, unit tests are created _before_, or _during_, code creation, and
-run after every small change, ensuring all behaviours are tested and that
-code conforms to the tests (rather than the other way round).
+> Nothing makes a system more flexible than a suite of tests. Nothing. Good architecture and design are important, but the effect of a robust suite of tests is an order of magnitude greater. It’s so much greater because those tests enable you to improve the design.
+--- Uncle Bob
 
-**A unit test targets a single behavior of a single unit of code, with a single assertion**.
+There are multiple types of automated testing. Regression tests, integration tests. unit tests etc. While there are similarities the idea behind them differs. These are different tools in the toolbox we can use to ensure good quality code.
 
-If code is difficult to unit test consider if it can be extracted from
-its surrounds — maybe into some library-like class — where it can be
-tested in isolation. Is it possible to refactor to remove hard-wired
-dependencies? Is it trying to do too much? Is it too tightly coupled?
-See also dependencies.
+* **Regression tests** when bugs are found, tests are created to ensure that the found bug is 1. fixed, and 2. does not happen again.
+* **Integration tests** ensures that multiple components can work together to complete a task.
+* **Unit tests** targets a single behavior of a single unit of code, with a single assertion.
 
-Prematurely falling back to integration testing might be a sign of
-failure to properly structure new code. Integration tests are to ensure
-multiple units play well together.
+Writing tests on a coupled design is difficult, therefore removing hard dependencies is not just an academic exercise, but it is a great tool to make code testable.
 
-## variable sets 👎
+Test driven development, where tests are written before, and during code creation, is a good practice to follow to ensure good quality code. Writing tests afterwards can be difficult as it won't help you with code design as much when code is produced.
 
-Related variables having names closely coupled to their initial value. E.g.:
+Gui is often classified as untestable as there's few good tools to verify behavior when buttons and sliders are manipulated. And while gui can't easily be tested, the logic it is connected to, can. Splitting ui from from "business logic" is a good choice and higly recommended.
+
+Just like good naming is important for variables and functions, naming tests are too. A good test name describes what has been tested. This way, when it fails for someone else, they can easily see what failed.
+
+If code is difficult to unit test consider if it can be extracted from its surrounds — maybe into some library-like class — where it can be tested in isolation. Is it possible to refactor to remove hard-wired dependencies? Is it trying to do too much? Is it too tightly coupled? See also dependencies.
+
+---
+
+## Avoid variable sets
+
+Representing data with code where related variables have names closely coupled to their initial value should be avoided to reduce repetition and make the code easier to understand and maintain.
+
+For example, instead of this:
 ```cpp
 Item fred { "Fred", 20 };
 Item martha { "Martha", 30 };
 Item george { "George", 40 };
 ```
-Issues:
-- Data represented by code, variables no longer really variable. See also naming
-- Every declaration, definition and usage has to be repeated = exploding code size
-- Comprehension and maintenance nightmare
 
-Solution:
-- Move data into a container e.g. constexpr
+Move the data into a container e.g. `constexpr std::array`, not a vector or map.
 
-std::array
+Container elements are typically value, array, pair, tuple, or a defined struct:
 
-(not vector or map).
-
-Container elements are typically value, array, pair or tuple:
-{% raw %}
 ```cpp
 using Pair = std::pair<std::string_view, size_t>;
 
@@ -610,9 +581,9 @@ constexpr std::array<Pair, numItems> items {{
 	{ "George", 40 }
 }};
 ```
-{% endraw %}
+
 Or struct, which has the advantage of named elements, but is slightly more overhead:
-{% raw %}
+
 ```cpp
 struct Button {
 	std::string_view name;
@@ -628,4 +599,3 @@ constexpr std::array<Button, numButtons> buttonDefs {{
 	{ "On your marks", 15, 15 }
 }};
 ```
-{% endraw %}
