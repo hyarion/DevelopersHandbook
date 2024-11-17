@@ -568,7 +568,8 @@ Item george { "George", 40 };
 
 Move the data into a container e.g. `constexpr std::array`, not a vector or map.
 
-Container elements are typically value, array, pair, tuple, or a defined struct:
+Container elements are typically value, array, pair, tuple, or a defined struct.
+Pair and tuple should only be used for very short lived data, such as this case:
 
 ```cpp
 using Pair = std::pair<std::string_view, size_t>;
@@ -582,7 +583,7 @@ constexpr std::array<Pair, numItems> items {{
 }};
 ```
 
-Or struct, which has the advantage of named elements, but is slightly more overhead:
+A struct can also be used, which has the advantage of named elements, but is slightly more overhead.
 
 ```cpp
 struct Button {
@@ -599,3 +600,5 @@ constexpr std::array<Button, numButtons> buttonDefs {{
 	{ "On your marks", 15, 15 }
 }};
 ```
+
+When in doubt, use a struct.
